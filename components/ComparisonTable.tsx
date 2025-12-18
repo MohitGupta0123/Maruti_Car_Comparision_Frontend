@@ -172,7 +172,7 @@ const ComparisonTable: React.FC<ComparisonTableProps> = ({ data }) => {
                     const rowBgClasses = isPriceRow
                       ? 'bg-green-100'
                       : isDifferent
-                      ? 'bg-amber-50/60 hover:bg-amber-100'
+                      ? 'bg-amber-50 hover:bg-amber-100'
                       : 'hover:bg-slate-50';
 
                     return (

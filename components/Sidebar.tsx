@@ -336,7 +336,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onCompare, isLoading }) => {
                 <button
                   type="button"
                   onClick={addVehicleCard}
-                  className="w-full py-2 px-3 rounded-lg border border-slate-200 text-sm font-semibold hover:bg-slate-50"
+                  className="w-full py-2 px-3 rounded-lg border border-slate-200 text-sm font-semibold bg-blue-200"
                 >
                   + Add Vehicle
                 </button>

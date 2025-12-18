@@ -11,7 +11,7 @@ const Header: React.FC = () => {
 
   return (
     <header className="bg-blue-900 border-b border-slate-200 h-16 
-      grid grid-cols-3 items-center px-4 md:px-8 sticky top-0 z-30 shadow-lg">
+      grid grid-cols-3 items-center px-4 md:px-8 sticky top-0 z-30 shadow-xl">
 
       {/* LEFT: LOGO */}
       <div className="flex items-center gap-3">
