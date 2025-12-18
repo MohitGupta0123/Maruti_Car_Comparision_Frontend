@@ -78,8 +78,13 @@ const App: React.FC = () => {
     const sel1 = selections[0];
     const sel2 = selections[1];
 
-    if (!sel1.variant || !sel2.variant) {
-      alert('Please select Variant for both vehicles.');
+    // ✅ Version is compulsory now
+    if (!sel1.brand || !sel1.model || !sel1.version || !sel1.variant) {
+      alert('Please select Brand, Car, Version and Variant for Vehicle 1.');
+      return;
+    }
+    if (!sel2.brand || !sel2.model || !sel2.version || !sel2.variant) {
+      alert('Please select Brand, Car, Version and Variant for Vehicle 2.');
       return;
     }
 
@@ -119,18 +124,14 @@ const App: React.FC = () => {
 
             <div className="mb-4 md:mb-6">
               <h2 className="text-2xl font-bold text-slate-900">Comparison Result</h2>
-              <p className="text-sm text-slate-500">
-                Detailed breakdown of features and specifications.
-              </p>
+              <p className="text-sm text-slate-500">Detailed breakdown of features and specifications.</p>
             </div>
 
             {isLoading && (
               <div className="absolute inset-0 bg-sky-50/70 backdrop-blur-sm z-20 flex items-center justify-center">
                 <div className="flex flex-col items-center">
                   <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mb-4"></div>
-                  <p className="text-blue-700 font-semibold text-sm">
-                    Fetching comparison data...
-                  </p>
+                  <p className="text-blue-700 font-semibold text-sm">Fetching comparison data...</p>
                 </div>
               </div>
             )}
