@@ -15,6 +15,7 @@ interface BackendCarMeta {
 interface GetModelDetailsApiResponse {
   status: string;
   cars: BackendCarMeta[];
+  versions?: Record<string, string[]>;
 }
 
 interface BackendFeatureRow {
@@ -101,6 +102,7 @@ export const fetchModelDetails = async (): Promise<ModelDetails> => {
     brands: Array.from(brandsSet),
     models,
     variants,
+    versions: json.versions || {},
   };
 };
 
@@ -111,7 +113,14 @@ export const fetchComparisonDetails = async (
   sel1: SelectionState,
   sel2: SelectionState
 ): Promise<ComparisonResponse> => {
-  const payload = {
+
+  const isSameCar =
+    !!sel1.brand && !!sel1.model && !!sel1.variant &&
+    sel1.brand === sel2.brand &&
+    sel1.model === sel2.model &&
+    sel1.variant === sel2.variant;
+
+  const payload: any = {
     brand1: sel1.brand,
     model1: sel1.model,
     variants1: [sel1.variant],
@@ -119,6 +128,12 @@ export const fetchComparisonDetails = async (
     model2: sel2.model,
     variants2: [sel2.variant],
   };
+
+  // ✅ only include versions when SAME car+variant is selected
+  if (isSameCar) {
+    payload.version1 = sel1.version;
+    payload.version2 = sel2.version;
+  }
 
   const res = await fetch(`${BASE_API}/get-comparison-details`, {
     method: 'POST',
@@ -128,9 +143,7 @@ export const fetchComparisonDetails = async (
 
   console.log(payload);
 
-  if (!res.ok) {
-    throw new Error(`Failed to fetch comparison details: ${res.status}`);
-  }
+  if (!res.ok) throw new Error(`Failed to fetch comparison details: ${res.status}`);
 
   const json: RawComparisonApiResponse = await res.json();
   const { car1, car2 } = json;
