@@ -1,5 +1,5 @@
 // src/App.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import ComparisonTable from './components/ComparisonTable';
@@ -22,21 +22,23 @@ const App: React.FC = () => {
 
   const [comparisonData, setComparisonData] = useState<ComparisonResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  
-  // News state
+
+  // News state (kept as 2 cards for top 2 vehicles only – least-change)
   const [news1, setNews1] = useState<NewsResponse | null>(null);
   const [news2, setNews2] = useState<NewsResponse | null>(null);
   const [isLoadingNews, setIsLoadingNews] = useState(false);
-  
-  // Track current selections to fetch news
-  const [currentSel1, setCurrentSel1] = useState<SelectionState | null>(null);
-  const [currentSel2, setCurrentSel2] = useState<SelectionState | null>(null);
+
+  // ✅ Track current selections as an ARRAY now
+  const [currentSelections, setCurrentSelections] = useState<SelectionState[]>([]);
+
+  // ✅ take first 2 selections for news (least-change)
+  const selForNews1 = useMemo(() => currentSelections[0] || null, [currentSelections]);
+  const selForNews2 = useMemo(() => currentSelections[1] || null, [currentSelections]);
 
   // Fetch news whenever models are selected (not variants)
   useEffect(() => {
     const fetchNews = async () => {
-      // Only fetch if both models are selected
-      if (!currentSel1?.model || !currentSel2?.model) {
+      if (!selForNews1?.model || !selForNews2?.model) {
         setNews1(null);
         setNews2(null);
         return;
@@ -44,12 +46,11 @@ const App: React.FC = () => {
 
       setIsLoadingNews(true);
       try {
-        // Fetch news for both models in parallel
         const [newsData1, newsData2] = await Promise.all([
-          fetchCarNews(currentSel1.model),
-          fetchCarNews(currentSel2.model),
+          fetchCarNews(selForNews1.model),
+          fetchCarNews(selForNews2.model),
         ]);
-        
+
         setNews1(newsData1);
         setNews2(newsData2);
       } catch (error) {
@@ -62,16 +63,29 @@ const App: React.FC = () => {
     };
 
     fetchNews();
-  }, [currentSel1?.model, currentSel2?.model]);
+  }, [selForNews1?.model, selForNews2?.model]);
 
-  const handleCompare = async (sel1: SelectionState, sel2: SelectionState) => {
-    // Update current selections
-    setCurrentSel1(sel1);
-    setCurrentSel2(sel2);
-    
-    // Fetch comparison data
+  // ✅ Sidebar now calls handleCompare(selections[])
+  // ✅ Backend still compares ONLY 2 cars -> we compare first two (least-change)
+  const handleCompare = async (selections: SelectionState[]) => {
+    setCurrentSelections(selections);
+
+    if (!selections || selections.length < 2) {
+      alert('Please select at least 2 vehicles to compare.');
+      return;
+    }
+
+    const sel1 = selections[0];
+    const sel2 = selections[1];
+
+    if (!sel1.variant || !sel2.variant) {
+      alert('Please select Variant for both vehicles.');
+      return;
+    }
+
     setIsLoading(true);
     setComparisonData(null);
+
     try {
       const data = await fetchComparisonDetails(sel1, sel2);
       setComparisonData(data);
@@ -101,11 +115,7 @@ const App: React.FC = () => {
         <main className="flex-1 overflow-auto p-4 md:p-8 lg:p-10 relative">
           <div className="max-w-6xl mx-auto pb-10">
             {/* News Buttons - Top of page */}
-            <NewsButtonCards 
-              news1={news1} 
-              news2={news2} 
-              isLoading={isLoadingNews}
-            />
+            <NewsButtonCards news1={news1} news2={news2} isLoading={isLoadingNews} />
 
             <div className="mb-4 md:mb-6">
               <h2 className="text-2xl font-bold text-slate-900">Comparison Result</h2>

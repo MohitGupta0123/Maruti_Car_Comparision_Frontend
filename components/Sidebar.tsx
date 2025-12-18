@@ -6,7 +6,7 @@ import { ChevronDown, CarFront, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface SidebarProps {
-  onCompare: (selection1: SelectionState, selection2: SelectionState) => void;
+  onCompare: (selections: SelectionState[]) => void;
   isLoading: boolean;
 }
 
@@ -44,13 +44,16 @@ const buttonVariant = {
 const Sidebar: React.FC<SidebarProps> = ({ onCompare, isLoading }) => {
   const [modelData, setModelData] = useState<ModelDetails | null>(null);
 
-  const [sel1, setSel1] = useState<SelectionState>({ brand: '', model: '', variant: '' });
-  const [sel2, setSel2] = useState<SelectionState>({ brand: '', model: '', variant: '' });
+  // ✅ dynamic vehicle cards
+  const [selections, setSelections] = useState<SelectionState[]>([
+    { brand: '', model: '', variant: '', version: '' },
+    { brand: '', model: '', variant: '', version: '' },
+  ]);
 
   // Sidebar open/close (default: open)
   const [isOpen, setIsOpen] = useState<boolean>(true);
 
-  // ✅ Key to re-trigger content animation when data arrives / sidebar opens
+  // ✅ Key to re-trigger content animation when data arrives / sidebar opens / cards change
   const [contentKey, setContentKey] = useState(0);
 
   const hasData = useMemo(() => !!modelData, [modelData]);
@@ -74,24 +77,60 @@ const Sidebar: React.FC<SidebarProps> = ({ onCompare, isLoading }) => {
     }
   }, [isOpen, hasData]);
 
-  const handleSelectionChange = (
-    vehicleNum: 1 | 2,
-    field: keyof SelectionState,
-    value: string
-  ) => {
-    const setSel = vehicleNum === 1 ? setSel1 : setSel2;
-    const currentSel = vehicleNum === 1 ? sel1 : sel2;
-
-    if (field === 'brand') {
-      setSel({ brand: value, model: '', variant: '' });
-    } else if (field === 'model') {
-      setSel({ ...currentSel, model: value, variant: '' });
-    } else {
-      setSel({ ...currentSel, variant: value });
-    }
+  // ✅ FIX: bump contentKey when adding/removing cards so new card becomes visible immediately
+  const addVehicleCard = () => {
+    setSelections((prev) => [...prev, { brand: '', model: '', variant: '', version: '' }]);
+    setContentKey((k) => k + 1);
   };
 
-  const isCompareDisabled = !sel1.variant || !sel2.variant || isLoading;
+  const removeVehicleCard = (idx: number) => {
+    setSelections((prev) => prev.filter((_, i) => i !== idx));
+    setContentKey((k) => k + 1);
+  };
+
+  const handleSelectionChange = (idx: number, field: keyof SelectionState, value: string) => {
+    setSelections((prev) => {
+      const next = [...prev];
+      const current = next[idx];
+
+      if (field === 'brand') next[idx] = { brand: value, model: '', variant: '', version: '' };
+      else if (field === 'model') next[idx] = { ...current, model: value, variant: '', version: '' };
+      else if (field === 'variant') next[idx] = { ...current, variant: value, version: '' };
+      else next[idx] = { ...current, version: value };
+
+      return next;
+    });
+  };
+
+  // ✅ duplicates logic: version dropdown appears only for duplicate brand+model+variant
+  const keyOf = (s: SelectionState) =>
+    s.brand && s.model && s.variant ? `${s.brand}__${s.model}__${s.variant}` : '';
+
+  const duplicateKeys = useMemo(() => {
+    const counts: Record<string, number> = {};
+    selections.forEach((s) => {
+      const k = keyOf(s);
+      if (!k) return;
+      counts[k] = (counts[k] || 0) + 1;
+    });
+
+    const dups = new Set<string>();
+    Object.entries(counts).forEach(([k, c]) => {
+      if (c > 1) dups.add(k);
+    });
+    return dups;
+  }, [selections]);
+
+  const needsVersion = (s: SelectionState) => duplicateKeys.has(keyOf(s));
+
+  const getVersionOptions = (model: string) =>
+    modelData ? modelData.versions?.[model] || [] : [];
+
+  // ✅ disable compare: require variant for all; require version only for duplicates
+  const isCompareDisabled =
+    isLoading ||
+    selections.some((s) => !s.variant) ||
+    selections.some((s) => needsVersion(s) && !s.version);
 
   const renderDropdown = (
     label: string,
@@ -187,7 +226,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onCompare, isLoading }) => {
             border-r border-slate-200
           "
         >
-          {/* Header (always visible first) */}
+          {/* Header */}
           <motion.div
             variants={headerVariant}
             initial="hidden"
@@ -200,7 +239,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onCompare, isLoading }) => {
                 <span>Select Cars</span>
               </h2>
               <p className="text-sm text-black-500 mt-1">
-                Choose two vehicles to compare variants and features.
+                Choose vehicles to compare variants and features.
               </p>
             </div>
 
@@ -224,89 +263,88 @@ const Sidebar: React.FC<SidebarProps> = ({ onCompare, isLoading }) => {
             {!modelData ? (
               <div className="text-sm text-slate-600">Loading options...</div>
             ) : (
-              // ✅ This remounts when data becomes available, so cards/tip animate on initial load too
-              <motion.div
-                key={contentKey}
-                initial="hidden"
-                animate="visible"
-                className="space-y-3"
-              >
-                <motion.div
-                  variants={cardsContainerVariant}
-                  className="grid grid-cols-1 md:grid-cols-2 gap-4"
-                >
-                  {/* Vehicle 1 */}
-                  <motion.div
-                    variants={cardVariant}
-                    className="bg-white rounded-xl p-3 border border-blue-200 shadow-sm"
-                  >
-                    <h3 className="text-base font-semibold text-blue-600 mb-2 flex items-center gap-2">
-                      <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-blue-500 text-[10px] font-bold text-white">
-                        1
-                      </span>
-                      Vehicle 1
-                    </h3>
-                    {renderDropdown('Brand', sel1.brand, modelData.brands, (v) =>
-                      handleSelectionChange(1, 'brand', v)
-                    )}
-                    {renderDropdown(
-                      'Model',
-                      sel1.model,
-                      sel1.brand ? modelData.models[sel1.brand] || [] : [],
-                      (v) => handleSelectionChange(1, 'model', v),
-                      !sel1.brand
-                    )}
-                    {renderDropdown(
-                      'Variant',
-                      sel1.variant,
-                      sel1.model ? modelData.variants[sel1.model] || [] : [],
-                      (v) => handleSelectionChange(1, 'variant', v),
-                      !sel1.model
-                    )}
-                  </motion.div>
+              // ✅ key remounts so newly added cards appear immediately (no blank space)
+              <motion.div key={contentKey} initial="hidden" animate="visible" className="space-y-3">
+                <motion.div variants={cardsContainerVariant} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {selections.map((sel, idx) => {
+                    const showVersion = needsVersion(sel);
+                    const versionOptions = sel.model ? getVersionOptions(sel.model) : [];
 
-                  {/* Vehicle 2 */}
-                  <motion.div
-                    variants={cardVariant}
-                    className="bg-white rounded-xl p-3 border border-emerald-200 shadow-sm"
-                  >
-                    <h3 className="text-base font-semibold text-emerald-600 mb-2 flex items-center gap-2">
-                      <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-[10px] font-bold text-white">
-                        2
-                      </span>
-                      Vehicle 2
-                    </h3>
-                    {renderDropdown('Brand', sel2.brand, modelData.brands, (v) =>
-                      handleSelectionChange(2, 'brand', v)
-                    )}
-                    {renderDropdown(
-                      'Model',
-                      sel2.model,
-                      sel2.brand ? modelData.models[sel2.brand] || [] : [],
-                      (v) => handleSelectionChange(2, 'model', v),
-                      !sel2.brand
-                    )}
-                    {renderDropdown(
-                      'Variant',
-                      sel2.variant,
-                      sel2.model ? modelData.variants[sel2.model] || [] : [],
-                      (v) => handleSelectionChange(2, 'variant', v),
-                      !sel2.model
-                    )}
-                  </motion.div>
+                    return (
+                      <motion.div
+                        key={`${idx}-${contentKey}`}
+                        variants={cardVariant}
+                        className="bg-white rounded-xl p-3 border border-slate-200 shadow-sm"
+                      >
+                        <h3 className="text-base font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-[10px] font-bold text-white">
+                            {idx + 1}
+                          </span>
+                          Vehicle {idx + 1}
+                        </h3>
+
+                        {renderDropdown('Brand', sel.brand, modelData.brands, (v) =>
+                          handleSelectionChange(idx, 'brand', v)
+                        )}
+
+                        {renderDropdown(
+                          'Model',
+                          sel.model,
+                          sel.brand ? modelData.models[sel.brand] || [] : [],
+                          (v) => handleSelectionChange(idx, 'model', v),
+                          !sel.brand
+                        )}
+
+                        {renderDropdown(
+                          'Variant',
+                          sel.variant,
+                          sel.model ? modelData.variants[sel.model] || [] : [],
+                          (v) => handleSelectionChange(idx, 'variant', v),
+                          !sel.model
+                        )}
+
+                        {showVersion &&
+                          renderDropdown(
+                            'Version',
+                            sel.version || '',
+                            versionOptions,
+                            (v) => handleSelectionChange(idx, 'version', v),
+                            false
+                          )}
+
+                        {selections.length > 2 && (
+                          <button
+                            type="button"
+                            onClick={() => removeVehicleCard(idx)}
+                            className="mt-2 text-xs text-red-600 hover:underline"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </motion.div>
+                    );
+                  })}
                 </motion.div>
 
                 <motion.div
                   variants={tipVariant}
                   className="bg-white rounded-lg px-3 py-2 text-[11px] text-slate-600 border border-slate-200 shadow-sm"
                 >
-                  Tip: Select the brand and model with different variants to see feature differences.
+                  Tip: If you select the same car+variant multiple times, you’ll be asked to pick versions for each.
                 </motion.div>
+
+                <button
+                  type="button"
+                  onClick={addVehicleCard}
+                  className="w-full py-2 px-3 rounded-lg border border-slate-200 text-sm font-semibold hover:bg-slate-50"
+                >
+                  + Add Vehicle
+                </button>
               </motion.div>
             )}
           </div>
 
-          {/* Compare button (comes last from below) */}
+          {/* Compare button */}
           <motion.div
             key={`footer-${contentKey}`}
             variants={buttonVariant}
@@ -315,7 +353,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onCompare, isLoading }) => {
             className="p-5 border-t border-slate-200 bg-sky-50"
           >
             <button
-              onClick={() => onCompare(sel1, sel2)}
+              onClick={() => onCompare(selections)}
               disabled={isCompareDisabled}
               className={`w-full py-2.5 px-4 rounded-lg font-semibold text-sm shadow-md transition-all duration-200 ${
                 isCompareDisabled
