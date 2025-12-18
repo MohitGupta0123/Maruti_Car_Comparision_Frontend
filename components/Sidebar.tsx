@@ -1,6 +1,6 @@
 // src/components/Sidebar.tsx
 import React, { useEffect, useMemo, useState } from 'react';
-import { ModelDetails, SelectionState } from '../types';
+import { ModelDetails, SelectionState, DropdownOption } from '../types';
 import { fetchModelDetails } from '../services/api';
 import { ChevronDown, CarFront, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -44,16 +44,16 @@ const buttonVariant = {
 const Sidebar: React.FC<SidebarProps> = ({ onCompare, isLoading }) => {
   const [modelData, setModelData] = useState<ModelDetails | null>(null);
 
-  // ✅ dynamic vehicle cards
+  // ✅ Brand -> Car -> Version (required) -> Variant
   const [selections, setSelections] = useState<SelectionState[]>([
-    { brand: '', model: '', variant: '', version: '' },
-    { brand: '', model: '', variant: '', version: '' },
+    { brand: '', model: '', version: '', variant: '' },
+    { brand: '', model: '', version: '', variant: '' },
   ]);
 
-  // Sidebar open/close (default: open)
+  // Sidebar open/close
   const [isOpen, setIsOpen] = useState<boolean>(true);
 
-  // ✅ Key to re-trigger content animation when data arrives / sidebar opens / cards change
+  // Re-trigger animation
   const [contentKey, setContentKey] = useState(0);
 
   const hasData = useMemo(() => !!modelData, [modelData]);
@@ -70,16 +70,12 @@ const Sidebar: React.FC<SidebarProps> = ({ onCompare, isLoading }) => {
     loadData();
   }, []);
 
-  // ✅ When sidebar is open and data becomes available, replay content animation
   useEffect(() => {
-    if (isOpen && hasData) {
-      setContentKey((k) => k + 1);
-    }
+    if (isOpen && hasData) setContentKey((k) => k + 1);
   }, [isOpen, hasData]);
 
-  // ✅ FIX: bump contentKey when adding/removing cards so new card becomes visible immediately
   const addVehicleCard = () => {
-    setSelections((prev) => [...prev, { brand: '', model: '', variant: '', version: '' }]);
+    setSelections((prev) => [...prev, { brand: '', model: '', version: '', variant: '' }]);
     setContentKey((k) => k + 1);
   };
 
@@ -93,49 +89,43 @@ const Sidebar: React.FC<SidebarProps> = ({ onCompare, isLoading }) => {
       const next = [...prev];
       const current = next[idx];
 
-      if (field === 'brand') next[idx] = { brand: value, model: '', variant: '', version: '' };
-      else if (field === 'model') next[idx] = { ...current, model: value, variant: '', version: '' };
-      else if (field === 'variant') next[idx] = { ...current, variant: value, version: '' };
-      else next[idx] = { ...current, version: value };
+      // ✅ chain resets
+      if (field === 'brand') next[idx] = { brand: value, model: '', version: '', variant: '' };
+      else if (field === 'model') next[idx] = { ...current, model: value, version: '', variant: '' };
+      else if (field === 'version') next[idx] = { ...current, version: value, variant: '' };
+      else next[idx] = { ...current, variant: value };
 
       return next;
     });
   };
 
-  // ✅ duplicates logic: version dropdown appears only for duplicate brand+model+variant
-  const keyOf = (s: SelectionState) =>
-    s.brand && s.model && s.variant ? `${s.brand}__${s.model}__${s.variant}` : '';
+  // ✅ keys for lookup
+  const bmKey = (s: SelectionState) => (s.brand && s.model ? `${s.brand}__${s.model}` : '');
+  const bmvKey = (s: SelectionState) =>
+    s.brand && s.model && s.version ? `${s.brand}__${s.model}__${s.version}` : '';
 
-  const duplicateKeys = useMemo(() => {
-    const counts: Record<string, number> = {};
-    selections.forEach((s) => {
-      const k = keyOf(s);
-      if (!k) return;
-      counts[k] = (counts[k] || 0) + 1;
-    });
+  const getVersionOptions = (s: SelectionState): DropdownOption[] => {
+    if (!modelData) return [];
+    const key = bmKey(s);
+    return key ? modelData.versions[key] || [] : [];
+  };
 
-    const dups = new Set<string>();
-    Object.entries(counts).forEach(([k, c]) => {
-      if (c > 1) dups.add(k);
-    });
-    return dups;
-  }, [selections]);
+  const getVariantOptions = (s: SelectionState): string[] => {
+    if (!modelData) return [];
+    const key = bmvKey(s);
+    return key ? modelData.variants[key] || [] : [];
+  };
 
-  const needsVersion = (s: SelectionState) => duplicateKeys.has(keyOf(s));
-
-  const getVersionOptions = (model: string) =>
-    modelData ? modelData.versions?.[model] || [] : [];
-
-  // ✅ disable compare: require variant for all; require version only for duplicates
+  // ✅ Compare disabled: require all fields for all cards
   const isCompareDisabled =
     isLoading ||
-    selections.some((s) => !s.variant) ||
-    selections.some((s) => needsVersion(s) && !s.version);
+    selections.some((s) => !s.brand || !s.model || !s.version || !s.variant);
 
+  // ✅ Dropdown renderer supports string[] OR DropdownOption[]
   const renderDropdown = (
     label: string,
     value: string,
-    options: string[],
+    options: (string | DropdownOption)[],
     onChange: (val: string) => void,
     disabled: boolean = false
   ) => (
@@ -143,6 +133,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onCompare, isLoading }) => {
       <label className="block text-[11px] font-semibold text-slate-600 uppercase tracking-wider mb-1">
         {label}
       </label>
+
       <div className="relative">
         <select
           value={value}
@@ -153,12 +144,17 @@ const Sidebar: React.FC<SidebarProps> = ({ onCompare, isLoading }) => {
           }`}
         >
           <option value="">Select {label}</option>
-          {options.map((opt) => (
-            <option key={opt} value={opt}>
-              {opt}
-            </option>
-          ))}
+
+          {options.map((opt) => {
+            const o = typeof opt === 'string' ? { value: opt, label: opt } : opt;
+            return (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            );
+          })}
         </select>
+
         <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-400">
           <ChevronDown size={16} />
         </div>
@@ -195,12 +191,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onCompare, isLoading }) => {
           aria-label="Open car selection sidebar"
         >
           <ChevronRight size={18} className="text-black-700" />
-          <span
-            className="
-              text-[11px] font-bold tracking-wide text-slate-700
-              transform -rotate-90
-            "
-          >
+          <span className="text-[11px] font-bold tracking-wide text-slate-700 transform -rotate-90">
             Select Cars Here
           </span>
         </button>
@@ -263,12 +254,11 @@ const Sidebar: React.FC<SidebarProps> = ({ onCompare, isLoading }) => {
             {!modelData ? (
               <div className="text-sm text-slate-600">Loading options...</div>
             ) : (
-              // ✅ key remounts so newly added cards appear immediately (no blank space)
               <motion.div key={contentKey} initial="hidden" animate="visible" className="space-y-3">
                 <motion.div variants={cardsContainerVariant} className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {selections.map((sel, idx) => {
-                    const showVersion = needsVersion(sel);
-                    const versionOptions = sel.model ? getVersionOptions(sel.model) : [];
+                    const versionOptions = getVersionOptions(sel);
+                    const variantOptions = getVariantOptions(sel);
 
                     return (
                       <motion.div
@@ -283,34 +273,37 @@ const Sidebar: React.FC<SidebarProps> = ({ onCompare, isLoading }) => {
                           Vehicle {idx + 1}
                         </h3>
 
+                        {/* Brand */}
                         {renderDropdown('Brand', sel.brand, modelData.brands, (v) =>
                           handleSelectionChange(idx, 'brand', v)
                         )}
 
+                        {/* Car */}
                         {renderDropdown(
-                          'Model',
+                          'Car',
                           sel.model,
                           sel.brand ? modelData.models[sel.brand] || [] : [],
                           (v) => handleSelectionChange(idx, 'model', v),
                           !sel.brand
                         )}
 
+                        {/* Version (mandatory) */}
                         {renderDropdown(
-                          'Variant',
-                          sel.variant,
-                          sel.model ? modelData.variants[sel.model] || [] : [],
-                          (v) => handleSelectionChange(idx, 'variant', v),
+                          'Version',
+                          sel.version,
+                          versionOptions,
+                          (v) => handleSelectionChange(idx, 'version', v),
                           !sel.model
                         )}
 
-                        {showVersion &&
-                          renderDropdown(
-                            'Version',
-                            sel.version || '',
-                            versionOptions,
-                            (v) => handleSelectionChange(idx, 'version', v),
-                            false
-                          )}
+                        {/* Variant (depends on version) */}
+                        {renderDropdown(
+                          'Variant',
+                          sel.variant,
+                          variantOptions,
+                          (v) => handleSelectionChange(idx, 'variant', v),
+                          !sel.version
+                        )}
 
                         {selections.length > 2 && (
                           <button
@@ -330,7 +323,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onCompare, isLoading }) => {
                   variants={tipVariant}
                   className="bg-white rounded-lg px-3 py-2 text-[11px] text-slate-600 border border-slate-200 shadow-sm"
                 >
-                  Tip: If you select the same car+variant multiple times, you’ll be asked to pick versions for each.
+                  Tip: Version is mandatory now — pick it before selecting variant.
                 </motion.div>
 
                 <button
